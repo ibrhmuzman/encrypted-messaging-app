@@ -2,9 +2,11 @@ from fastapi import FastAPI, Form
 from fastapi.responses import JSONResponse
 import base64
 import time
+import json
+from pathlib import Path
 
-from security.stegano import stegano_extract
-from security.des import encrypt_des, decrypt_des
+from security import stegano_extract, encrypt_des, decrypt_des
+
 
 
 app = FastAPI()
@@ -33,6 +35,34 @@ inbox = {
     ]
 }
 """
+DATA_FILE = Path("data.json")
+
+def load_data():
+    global users, inbox
+    if DATA_FILE.exists():
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            users = data.get("users", {})
+            inbox = data.get("inbox", {})
+    else:
+        users = {}
+        inbox = {}
+
+def save_data():
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "users": users,
+                "inbox": inbox
+            },
+            f,
+            ensure_ascii=False,
+            indent=2
+        )
+
+# Uygulama ilk açıldığında varsa eski verileri yükle
+load_data()
+
 
 
 # ============================================================
@@ -65,7 +95,7 @@ async def register_user(username: str = Form(...), image_base64: str = Form(...)
 
         # Mesaj kutusu oluşturulur
         inbox[username] = []
-
+        save_data()
         return JSONResponse({"status": "ok", "message": "User registered"})
 
     except Exception as e:
@@ -108,6 +138,9 @@ async def heartbeat(username: str = Form(...)):
     pending_messages = inbox[username]
     inbox[username] = []  # kutuyu boşalt
 
+    # Değişikliği kaydet
+    save_data()
+    
     return {
         "status": "ok",
         "messages": pending_messages
@@ -188,6 +221,8 @@ async def send_message(
             "from": sender,
             "cipher": new_cipher_b64
         })
+        # Değişiklikleri diske yaz
+        save_data()
 
         return JSONResponse({"status": "ok", "message": "Message stored"})
 
