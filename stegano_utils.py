@@ -1,85 +1,120 @@
 from PIL import Image
 import io
 
-def stegano_embed(image_bytes: bytes, password: str) -> bytes:
-    """
-    Kullanıcı parolasını görüntünün piksellerinin LSB bitlerine gömer.
-    DES anahtarından bağımsızdır.
-    """
+from PIL import Image
+import io
 
-    # 1) byte -> Image aç
+def stegano_embed(image_bytes: bytes, secret_text: str) -> bytes:
+    # Key'i byte'a çevir
+    key_bytes = secret_text.encode("utf-8")
+    key_length = len(key_bytes)
+
+    if key_length > 255:
+        raise ValueError("Key 255 byte'tan büyük olamaz.")
+
+    # Gömülecek veri: [1 byte length] + key bytes
+    data = bytes([key_length]) + key_bytes
+    bits = ''.join(f'{byte:08b}' for byte in data)
+
+    # Resmi aç
     img = Image.open(io.BytesIO(image_bytes))
     img = img.convert("RGB")
+    pixels = img.load()
 
-    # 2) Parolayı bit dizisine çevir
-    binary_password = ''.join(format(ord(c), '08b') for c in password)
-    password_length = len(binary_password)
+    width, height = img.size
+    total_pixels = width * height
 
-    pixels = list(img.getdata())
-    new_pixels = []
+    if len(bits) > total_pixels * 3:
+        raise ValueError("Mesaj resmi gömmek için çok büyük!")
 
     bit_index = 0
 
-    # 3) Her pikselin kırmızı kanalının LSB'sine sırayla yaz
-    for (r, g, b) in pixels:
-        if bit_index < password_length:
-            # r'nin son bitini password bit'i ile değiştir
-            new_r = (r & ~1) | int(binary_password[bit_index])
-            bit_index += 1
-        else:
-            new_r = r  # yazacak bit kalmadıysa aynen koplaya
+    # Her pikselin R, G, B bitlerini LSB ile değiştir
+    for y in range(height):
+        for x in range(width):
+            if bit_index >= len(bits):
+                break
 
-        new_pixels.append((new_r, g, b))
+            r, g, b = pixels[x, y]
 
-    img.putdata(new_pixels)
+            # R kanalı
+            if bit_index < len(bits):
+                r = (r & 0xFE) | int(bits[bit_index])
+                bit_index += 1
 
-    # 4) Çıktıyı tekrar bytes olarak döndür
+            # G kanalı
+            if bit_index < len(bits):
+                g = (g & 0xFE) | int(bits[bit_index])
+                bit_index += 1
+
+            # B kanalı
+            if bit_index < len(bits):
+                b = (b & 0xFE) | int(bits[bit_index])
+                bit_index += 1
+
+            pixels[x, y] = (r, g, b)
+
+        if bit_index >= len(bits):
+            break
+
+    # PNG olarak kaydet
     output = io.BytesIO()
-    img.save(output, format="PNG")  # PNG = lossless, bozulma olmaz
+    img.save(output, format="PNG")
     return output.getvalue()
 
 
 def stegano_extract(image_bytes: bytes) -> str:
-    """
-    Görüntünün LSB bitlerinden gömülü kullanıcı parolasını çıkarır.
-    DES anahtarıyla bağlantısı yoktur.
-    """
-
     img = Image.open(io.BytesIO(image_bytes))
     img = img.convert("RGB")
+    pixels = img.load()
 
-    pixels = list(img.getdata())
+    width, height = img.size
 
+    # ----- 1) Önce ilk 8 bit: key_length -----
     bits = ""
+    bit_count = 0
+    px = 0
+    py = 0
+    channel_index = 0  # 0: R, 1: G, 2: B
 
-    # Kullanıcı parolasının uzunluğunu bilmiyoruz → sentinel karakteri gerekir
-    # Parola bitlerinin sonunda özel bir bit dizisi ekleyeceğiz: "END"
-    # END = üç karakter: E (69), N (78), D (68)
-    # "E" = 01000101, "N" = 01001110, "D" = 01000100
+    # İlk 8 bit için
+    while bit_count < 8:
+        r, g, b = pixels[px, py]
+        channels = [r, g, b]
 
-    END_MARKER = "END"
-    END_BITS = ''.join(format(ord(c), '08b') for c in END_MARKER)
+        bits += str(channels[channel_index] & 1)
+        bit_count += 1
 
-    for (r, g, b) in pixels:
-        bits += str(r & 1)
+        channel_index += 1
+        if channel_index == 3:  # sonraki piksele geç
+            channel_index = 0
+            px += 1
+            if px == width:
+                px = 0
+                py += 1
 
-        # Eğer bits içinde END marker'ın binary karşılığı geçtiyse → dur
-        if END_BITS in bits:
-            break
+    key_length = int(bits, 2)
 
-    # Şimdi bitleri 8-bitlik parçalara ayır
-    chars = []
-    for i in range(0, len(bits), 8):
-        byte = bits[i:i+8]
-        if len(byte) < 8:
-            break
-        char = chr(int(byte, 2))
-        
-        # END marker'a geldiysek parola biter
-        if ''.join(chars[-2:] + [char]) == END_MARKER:
-            chars = chars[:-2]  # END'e ait karakterleri sil
-            break
+    # ----- 2) Şimdi key_length * 8 bit okuyacağız -----
+    bits = ""
+    bit_count = 0
+    needed_bits = key_length * 8
 
-        chars.append(char)
+    while bit_count < needed_bits:
+        r, g, b = pixels[px, py]
+        channels = [r, g, b]
 
-    return ''.join(chars)
+        bits += str(channels[channel_index] & 1)
+        bit_count += 1
+
+        channel_index += 1
+        if channel_index == 3:
+            channel_index = 0
+            px += 1
+            if px == width:
+                px = 0
+                py += 1
+
+    # ----- 3) Byte'lara çevir -----
+    key_bytes = bytes(int(bits[i:i+8], 2) for i in range(0, needed_bits, 8))
+    return key_bytes.decode("utf-8")
