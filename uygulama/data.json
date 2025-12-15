@@ -2,18 +2,28 @@
   "users": {
     "ibrahim": {
       "key": "TEST_KEY_12345678",
-      "online": true,
+      "online": false,
       "last_heartbeat": 1765319899.9684415
     },
     "ceyda": {
       "key": "TEST_KEY_12345678",
-      "online": true,
+      "online": false,
       "last_heartbeat": 1765319900.7058756
     },
     "eren": {
       "key": "TEST_KEY_12345678",
       "online": false,
       "last_heartbeat": 1765319374.978769
+    },
+    "test_user": {
+      "key": "TEST_KEY_12345678",
+      "online": true,
+      "last_heartbeat": 1765803856.9467485
+    },
+    "receiver_user": {
+      "key": "TEST_KEY_12345678",
+      "online": true,
+      "last_heartbeat": 1765803856.9607303
     }
   },
   "inbox": {
@@ -28,6 +38,8 @@
         "from": "ibrahim",
         "cipher": "c2VsYW0="
       }
-    ]
+    ],
+    "test_user": [],
+    "receiver_user": []
   }
 }
