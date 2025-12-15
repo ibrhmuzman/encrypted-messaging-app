@@ -1,214 +1,137 @@
 from fastapi import FastAPI, Form
 from fastapi.responses import JSONResponse
-import base64
+import json
 import time
-
-from security.stegano import stegano_extract
-from security.des import encrypt_des, decrypt_des
-
+import os
 
 app = FastAPI()
 
-# ============================================================
-# VERİ YAPILARI
-# ============================================================
-
-users = {}  
-"""
-users = {
-    "c1": {
-        "key": "...",              # stegano’dan çıkarılan DES anahtarı
-        "online": False,           # login/heartbeat ile güncellenir
-        "last_heartbeat": 0        # en son ne zaman heartbeat geldi
-    }
-}
-"""
-
-inbox = {}
-"""
-inbox = {
-    "c2": [
-        {"from": "c1", "cipher": "...base64..."},
-        {"from": "c3", "cipher": "...base64..."}
-    ]
-}
-"""
+DATA_FILE = "data.json"
+HEARTBEAT_TIMEOUT = 15  # saniye
 
 
 # ============================================================
-# BASE64 -> BYTES YARDIMCI FONKSİYONU
+# DATA.JSON YARDIMCILARI
 # ============================================================
 
-def decode_base64_to_bytes(b64_string):
-    return base64.b64decode(b64_string)
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {"users": {}, "inbox": {}}
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def update_online_status(data):
+    now = time.time()
+    for user, info in data["users"].items():
+        if info["online"] and now - info["last_heartbeat"] > HEARTBEAT_TIMEOUT:
+            info["online"] = False
 
 
 # ============================================================
-# 1) REGISTER ENDPOINT
+# REGISTER
 # ============================================================
 
 @app.post("/register")
-async def register_user(username: str = Form(...), image_base64: str = Form(...)):
-    try:
-        # Base64 görüntü decode edilir
-        image_bytes = decode_base64_to_bytes(image_base64)
+async def register(username: str = Form(...), image_base64: str = Form(...)):
+    data = load_data()
 
-        # Security ekibinin yazacağı stegano extraction çağrılır
-        extracted_key = stegano_extract(image_bytes)
+    if username in data["users"]:
+        return JSONResponse({"status": "error", "message": "User already exists"})
 
-        # Kullanıcı kaydedilir
-        users[username] = {
-            "key": extracted_key,
-            "online": False,
-            "last_heartbeat": 0
-        }
+    # Key üretimi client tarafına bırakıldı (şimdilik placeholder)
+    data["users"][username] = {
+        "key": "CLIENT_SIDE_KEY",
+        "online": False,
+        "last_heartbeat": 0
+    }
+    data["inbox"][username] = []
 
-        # Mesaj kutusu oluşturulur
-        inbox[username] = []
-
-        return JSONResponse({"status": "ok", "message": "User registered"})
-
-    except Exception as e:
-        return JSONResponse({"status": "error", "detail": str(e)})
-
+    save_data(data)
+    return JSONResponse({"status": "ok", "message": "Registered"})
 
 
 # ============================================================
-# 2) LOGIN ENDPOINT
+# LOGIN
 # ============================================================
 
 @app.post("/login")
 async def login(username: str = Form(...)):
-    if username not in users:
+    data = load_data()
+
+    if username not in data["users"]:
         return JSONResponse({"status": "error", "message": "User not registered"})
 
-    # Kullanıcı online oldu
-    users[username]["online"] = True
-    users[username]["last_heartbeat"] = time.time()
+    data["users"][username]["online"] = True
+    data["users"][username]["last_heartbeat"] = time.time()
 
+    save_data(data)
     return JSONResponse({"status": "ok", "message": "Login successful"})
 
 
 # ============================================================
-# 3) HEARTBEAT ENDPOINT
+# HEARTBEAT
 # ============================================================
-
-HEARTBEAT_TIMEOUT = 10    # saniye – kullanıcı bu süre boyunca heartbeat göndermezse offline sayılır
 
 @app.post("/heartbeat")
 async def heartbeat(username: str = Form(...)):
-    if username not in users:
+    data = load_data()
+
+    if username not in data["users"]:
         return JSONResponse({"status": "error", "message": "User not registered"})
 
-    # Kullanıcıyı online işaretle ve zaman güncelle
-    users[username]["online"] = True
-    users[username]["last_heartbeat"] = time.time()
+    data["users"][username]["online"] = True
+    data["users"][username]["last_heartbeat"] = time.time()
 
-    # Offline mesajları teslim et
-    pending_messages = inbox[username]
-    inbox[username] = []  # kutuyu boşalt
+    messages = data["inbox"][username]
+    data["inbox"][username] = []
+
+    save_data(data)
+    return {"status": "ok", "messages": messages}
+
+
+# ============================================================
+# USERS
+# ============================================================
+
+@app.get("/users")
+async def users():
+    data = load_data()
+    update_online_status(data)
+    save_data(data)
 
     return {
-        "status": "ok",
-        "messages": pending_messages
+        "users": [
+            {"username": u, "online": info["online"]}
+            for u, info in data["users"].items()
+        ]
     }
 
 
 # ============================================================
-# BACKGROUND LOGIC: Heartbeat timeout kontrolü
-# ============================================================
-
-def update_online_status():
-    """
-    Bu fonksiyon her endpoint çağrısında tetiklenebilir.
-    Her kullanıcı için last_heartbeat kontrol edilir.
-    Eğer çok uzun süre heartbeat yoksa kullanıcı offline yapılır.
-    """
-    now = time.time()
-    for username, data in users.items():
-        if data["online"]:
-            # kullanıcının online kalması için son heartbeat zamanına bakıyoruz
-            if now - data["last_heartbeat"] > HEARTBEAT_TIMEOUT:
-                data["online"] = False
-
-
-
-# ============================================================
-# 4) USERS ENDPOINT (online/offline gösterir)
-# ============================================================
-
-@app.get("/users")
-async def list_users():
-    # Her çağrıda timeout kontrolü yapıyoruz
-    update_online_status()
-
-    # Liste döndürülür
-    response_list = [
-        {"username": u, "online": users[u]["online"]}
-        for u in users
-    ]
-
-    return {"users": response_list}
-
-
-
-# ============================================================
-# 5) SEND MESSAGE ENDPOINT
+# SEND MESSAGE
 # ============================================================
 
 @app.post("/send")
-async def send_message(
+async def send(
     sender: str = Form(...),
     receiver: str = Form(...),
     cipher_base64: str = Form(...)
 ):
-    # Geçerlilik kontrolleri
-    if sender not in users:
-        return JSONResponse({"error": "Sender not registered"})
-    if receiver not in users:
-        return JSONResponse({"error": "Receiver not registered"})
+    data = load_data()
 
-    try:
-        # 1) Base64 çöz
-        cipher_bytes = base64.b64decode(cipher_base64)
+    if sender not in data["users"] or receiver not in data["users"]:
+        return JSONResponse({"status": "error", "message": "Invalid user"})
 
-        # 2) Gönderen anahtarı ile decrypt
-        sender_key = users[sender]["key"]
-        plain_message = decrypt_des(cipher_bytes, sender_key)
+    data["inbox"][receiver].append({
+        "from": sender,
+        "cipher": cipher_base64
+    })
 
-        # 3) Alıcı anahtarı ile yeniden encrypt
-        receiver_key = users[receiver]["key"]
-        new_cipher = encrypt_des(plain_message, receiver_key)
-
-        # Base64 formatına çevir
-        new_cipher_b64 = base64.b64encode(new_cipher).decode()
-
-        # 4) Alıcının inbox'ına ekle
-        inbox[receiver].append({
-            "from": sender,
-            "cipher": new_cipher_b64
-        })
-
-        return JSONResponse({"status": "ok", "message": "Message stored"})
-
-    except Exception as e:
-        return JSONResponse({"status": "error", "detail": str(e)})
-
-
-
-# ============================================================
-# 6) MESSAGES ENDPOINT (manuel offline mesaj çekme)
-# ============================================================
-
-# @app.get("/messages")
-# async def get_messages(username: str):
-#     if username not in inbox:
-#         return JSONResponse({"error": "User not registered"})
-
-#     # Mesajları al
-#     messages = inbox[username]
-
-#     # Kutuyu temizle
-#     inbox[username] = []
-
-#     return {"messages": messages}
+    save_data(data)
+    return JSONResponse({"status": "ok"})
