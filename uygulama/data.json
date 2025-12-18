@@ -1,0 +1,16 @@
+{
+  "users": {
+    "cedo": {
+      "online": true,
+      "last_heartbeat": 1766097998.3384159
+    },
+    "eren": {
+      "online": true,
+      "last_heartbeat": 1766098112.2488146
+    }
+  },
+  "inbox": {
+    "cedo": [],
+    "eren": []
+  }
+}
