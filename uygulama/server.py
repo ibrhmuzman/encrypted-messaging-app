@@ -2,21 +2,39 @@ from fastapi import FastAPI, Form
 from fastapi.responses import JSONResponse
 import time
 import json
-import os
+import base64
 from pathlib import Path
 
-app = FastAPI()
+from des_utils import generate_random_key, decrypt_des, encrypt_des
+from hash_utils import hash_password
+from stegano_utils import stegano_extract
+
 
 # ------------------------------------------------------------
-# PATHS (KRİTİK: her şey server.py'nin bulunduğu klasöre göre)
+# PATHS  ✅ ÖNCE
 # ------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR / "data.json"
 PROFILE_DIR = BASE_DIR / "profiles"
 PROFILE_DIR.mkdir(exist_ok=True)
 
-HEARTBEAT_TIMEOUT = 10  # seconds
+HEARTBEAT_TIMEOUT = 10
 
+
+# ------------------------------------------------------------
+# LOG SYSTEM  ✅ BASE_DIR'DAN SONRA
+# ------------------------------------------------------------
+LOG_FILE = BASE_DIR / "crypto_log.txt"
+
+def log(msg):
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(msg + "\n")
+
+
+# ------------------------------------------------------------
+# FASTAPI APP  ✅ EN SON
+# ------------------------------------------------------------
+app = FastAPI()
 
 # ------------------------------------------------------------
 # STORAGE
@@ -24,148 +42,142 @@ HEARTBEAT_TIMEOUT = 10  # seconds
 def load_data():
     if not DATA_FILE.exists():
         return {"users": {}, "inbox": {}}
-
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if "users" not in data:
-                data["users"] = {}
-            if "inbox" not in data:
-                data["inbox"] = {}
-            return data
-    except (json.JSONDecodeError, OSError):
-        return {"users": {}, "inbox": {}}
-
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def update_online_status(data):
-    now = time.time()
-    for u, info in data["users"].items():
-        if info.get("online"):
-            if now - info.get("last_heartbeat", 0) > HEARTBEAT_TIMEOUT:
-                info["online"] = False
-
+        json.dump(data, f, indent=2)
 
 # ------------------------------------------------------------
-# 1) REGISTER  (server key bilmez, sadece profile image saklar)
+# REGISTER
 # ------------------------------------------------------------
 @app.post("/register")
 async def register(username: str = Form(...), image_base64: str = Form(...)):
     data = load_data()
 
     if username in data["users"]:
-        return JSONResponse({"status": "error", "message": "User exists"}, status_code=400)
+        return JSONResponse({"status": "error", "message": "User exists"}, 400)
 
-    # user metadata
+    # stegano -> password
+    image_bytes = base64.b64decode(image_base64)
+    password = stegano_extract(image_bytes)
+    pw_hash = hash_password(password)
+
+    # DES KEY REGISTER'DA ÜRETİLİR (KALICI)
+    des_key = generate_random_key()
+    des_key_b64 = base64.b64encode(des_key).decode()
+
     data["users"][username] = {
+        "password_hash": pw_hash,
+        "des_key": des_key_b64,
         "online": False,
         "last_heartbeat": 0
     }
+
     data["inbox"][username] = []
 
-    # profile image save
-    img_path = PROFILE_DIR / f"{username}.b64"
-    try:
-        with open(img_path, "w", encoding="utf-8") as f:
-            f.write(image_base64)
-    except OSError as e:
-        return JSONResponse({"status": "error", "message": f"Cannot save image: {e}"}, status_code=500)
-
+    (PROFILE_DIR / f"{username}.b64").write_text(image_base64)
     save_data(data)
-    return JSONResponse({"status": "ok", "message": "Registered"})
 
+    return {"status": "ok"}
 
 # ------------------------------------------------------------
-# 2) LOGIN
+# LOGIN
 # ------------------------------------------------------------
 @app.post("/login")
-async def login(username: str = Form(...)):
+async def login(username: str = Form(...), password: str = Form(...)):
     data = load_data()
 
     if username not in data["users"]:
-        return JSONResponse({"status": "error", "message": "User not registered"}, status_code=404)
+        return JSONResponse({"status": "error"}, 404)
+
+    if hash_password(password) != data["users"][username]["password_hash"]:
+        return JSONResponse({"status": "error"}, 401)
 
     data["users"][username]["online"] = True
     data["users"][username]["last_heartbeat"] = time.time()
+
     save_data(data)
 
-    return JSONResponse({"status": "ok", "message": "Login successful"})
-
-
-# ------------------------------------------------------------
-# 3) PROFILE IMAGE (client login'de çeker)
-# ------------------------------------------------------------
-@app.get("/profile-image/{username}")
-async def profile_image(username: str):
-    img_path = PROFILE_DIR / f"{username}.b64"
-
-    if not img_path.exists():
-        return JSONResponse({"status": "error", "message": "Image not found"}, status_code=404)
-
-    with open(img_path, "r", encoding="utf-8") as f:
-        image_base64 = f.read()
-
-    return {"status": "ok", "image_base64": image_base64}
-
+    return {
+        "status": "ok",
+        "des_key": data["users"][username]["des_key"]
+    }
 
 # ------------------------------------------------------------
-# 4) HEARTBEAT (offline messages)
+# SEND MESSAGE
+# ------------------------------------------------------------
+@app.post("/send")
+async def send(
+    sender: str = Form(...),
+    receiver: str = Form(...),
+    cipher_base64: str = Form(...)
+):
+    data = load_data()
+
+    if sender not in data["users"] or receiver not in data["users"]:
+        return JSONResponse({"status": "error"}, 404)
+
+    sender_key = base64.b64decode(data["users"][sender]["des_key"])
+    # Gönderenin key'i ile çöz
+    log("----- NEW MESSAGE -----")
+    log(f"FROM CLIENT (encrypted): {cipher_base64}")
+
+    plaintext = decrypt_des(cipher_base64.encode(), sender_key)
+    
+    receiver_online = data["users"][receiver]["online"]
+
+    log(f"ROUTING: from={sender} to={receiver} online={receiver_online}")
+
+
+    log(f"SERVER DECRYPTED (plaintext): {plaintext}")
+
+    # SERVER PLAINTEXT SAKLAR
+    data["inbox"][receiver].append({
+        "from": sender,
+        "message": plaintext
+    })
+
+    save_data(data)
+    return {"status": "ok"}
+
+# ------------------------------------------------------------
+# HEARTBEAT / GET MESSAGES
 # ------------------------------------------------------------
 @app.post("/heartbeat")
 async def heartbeat(username: str = Form(...)):
     data = load_data()
 
     if username not in data["users"]:
-        return JSONResponse({"status": "error", "message": "User not registered"}, status_code=404)
+        return JSONResponse({"status": "error"}, 404)
 
-    data["users"][username]["online"] = True
-    data["users"][username]["last_heartbeat"] = time.time()
+    receiver_key = base64.b64decode(data["users"][username]["des_key"])
 
-    pending = data["inbox"].get(username, [])
+    messages = []
+    for msg in data["inbox"][username]:
+        cipher = encrypt_des(msg["message"], receiver_key)
+        log(f"SERVER RE-ENCRYPTED FOR RECEIVER: {cipher.decode()}")
+        messages.append({
+            "from": msg["from"],
+            "cipher": cipher.decode()
+        })
+
     data["inbox"][username] = []
+    data["users"][username]["last_heartbeat"] = time.time()
     save_data(data)
 
-    return {"status": "ok", "messages": pending}
-
+    return {"status": "ok", "messages": messages}
 
 # ------------------------------------------------------------
-# 5) USERS
+# USERS
 # ------------------------------------------------------------
 @app.get("/users")
 async def users():
     data = load_data()
-    update_online_status(data)
-    save_data(data)
-
     return {
         "users": [
-            {"username": u, "online": data["users"][u].get("online", False)}
+            {"username": u, "online": data["users"][u]["online"]}
             for u in data["users"]
         ]
     }
-
-
-# ------------------------------------------------------------
-# 6) SEND (server decrypt etmez, sadece cipher'ı taşır)
-# ------------------------------------------------------------
-@app.post("/send")
-async def send(sender: str = Form(...), receiver: str = Form(...), cipher_base64: str = Form(...)):
-    data = load_data()
-
-    if sender not in data["users"]:
-        return JSONResponse({"status": "error", "message": "Sender not registered"}, status_code=404)
-    if receiver not in data["users"]:
-        return JSONResponse({"status": "error", "message": "Receiver not registered"}, status_code=404)
-
-    data["inbox"].setdefault(receiver, [])
-    data["inbox"][receiver].append({
-        "from": sender,
-        "cipher": cipher_base64
-    })
-
-    save_data(data)
-    return JSONResponse({"status": "ok"})

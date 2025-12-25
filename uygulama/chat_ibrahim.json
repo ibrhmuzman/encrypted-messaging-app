@@ -1,0 +1,30 @@
+{
+  "eren": [
+    {
+      "from": "eren",
+      "text": "ibrahim"
+    },
+    {
+      "from": "me",
+      "text": "merhaba eren"
+    }
+  ],
+  "ceyda2": [
+    {
+      "from": "ceyda2",
+      "text": "ibrahim"
+    },
+    {
+      "from": "me",
+      "text": "ceyda"
+    },
+    {
+      "from": "ceyda2",
+      "text": "selam"
+    },
+    {
+      "from": "me",
+      "text": "merhaba"
+    }
+  ]
+}
