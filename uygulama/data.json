@@ -4,18 +4,18 @@
       "password_hash": "9127377511ed438d56c65f293609da3e33d095e98ceeae717ca329548a019050",
       "des_key": "UgXCIsQuY9k=",
       "online": true,
-      "last_heartbeat": 1766670023.88012
+      "last_heartbeat": 1766781321.6284952
     },
     "ibrahim": {
       "password_hash": "9711bcc773b67df9d02c1adc26240b1332048ab8ec17a23732ace9e0c030e0bd",
       "des_key": "F+3+gpo/U4o=",
-      "online": true,
-      "last_heartbeat": 1766670188.878264
+      "online": false,
+      "last_heartbeat": 1766781203.1331468
     },
     "eren": {
       "password_hash": "f9c1aa3fc037608ec954aceb21c1f7d307cb1f0bfc35ec92efda44576391536b",
       "des_key": "cQhEi4F+brg=",
-      "online": true,
+      "online": false,
       "last_heartbeat": 1766668765.378989
     }
   },

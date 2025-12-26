@@ -163,46 +163,69 @@ class ChatWindow(QWidget):
             sender = msg["from"]
             text = msg["text"]
 
+            # 🔑 KENDİ MESAJINI ASLA TEKRAR EKLEME
+            if sender == self.api.current_user:
+                continue
+
+            # 🔑 SADECE KARŞI TARAF MESAJLARI
             self.conversations.setdefault(sender, []).append({
                 "from": sender,
                 "text": text
             })
 
+            # 🔑 AKTİF SOHBET AÇIKSA GÖSTER
             if self.current_chat_user == sender:
                 self.chat_box.insertHtml(
                     self.other_bubble(sender, text) + "<br>"
                 )
             else:
+                # 🔔 OKUNMAMIŞ İŞARETİ
                 self.unread[sender] = True
                 self.load_users()
 
         self.save_chats()
 
+
     # ---------------- BUBBLES ----------------
     def my_bubble(self, text):
         return f"""
-        <div style="
-            background:#8e6ec8;
-            color:white;
-            padding:10px 14px;
-            border-radius:18px 18px 4px 18px;
-            max-width:65%;
-            margin-left:auto;
-            margin-top:6px;
-        ">{text}</div>
+        <table width="100%" cellspacing="0" cellpadding="0">
+        <tr>
+            <td align="right">
+            <table cellspacing="0" cellpadding="8" style="
+                background:#8e6ec8;
+                color:white;
+                border-radius:16px;
+                max-width:60%;
+            ">
+                <tr><td>{text}</td></tr>
+            </table>
+            </td>
+        </tr>
+        </table>
         """
 
     def other_bubble(self, sender, text):
         return f"""
-        <div style="
-            background:#f1ecf9;
-            color:#3d2c4f;
-            padding:10px 14px;
-            border-radius:18px 18px 18px 4px;
-            max-width:65%;
-            margin-top:6px;
-        ">
-        <b>{sender}</b><br>{text}</div>
+        <table width="100%" cellspacing="0" cellpadding="0">
+        <tr>
+            <td align="left">
+            <table cellspacing="0" cellpadding="8" style="
+                background:#f1ecf9;
+                color:#3d2c4f;
+                border-radius:16px;
+                max-width:60%;
+            ">
+                <tr>
+                <td>
+                    <b>{sender}</b><br>
+                    {text}
+                </td>
+                </tr>
+            </table>
+            </td>
+        </tr>
+        </table>
         """
 
     # ---------------- ACTIVE USERS ----------------

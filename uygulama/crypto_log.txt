@@ -180,3 +180,18 @@ SERVER RE-ENCRYPTED FOR RECEIVER: AI2BIe9hs74=
 FROM CLIENT (encrypted): 0pgLSYIT8q1uSXgj/BGRKQ==
 ROUTING: from=ibrahim to=eren online=True
 SERVER DECRYPTED (plaintext): merhaba eren
+----- NEW MESSAGE -----
+FROM CLIENT (encrypted): YWfG4ZZGnEk=
+ROUTING: from=ibrahim to=ceyda2 online=True
+SERVER DECRYPTED (plaintext): selam
+----- NEW MESSAGE -----
+FROM CLIENT (encrypted): YRn8XWa2QIWdJxrndgUweA==
+ROUTING: from=ibrahim to=ceyda2 online=False
+SERVER DECRYPTED (plaintext): nasılsın
+SERVER RE-ENCRYPTED FOR RECEIVER: roTjZDbArwQ=
+SERVER RE-ENCRYPTED FOR RECEIVER: ClcKYB3NYQH2ooyN8EnKpw==
+----- NEW MESSAGE -----
+FROM CLIENT (encrypted): imM7H0TD3zY=
+ROUTING: from=ceyda2 to=ibrahim online=True
+SERVER DECRYPTED (plaintext): iyiyim
+SERVER RE-ENCRYPTED FOR RECEIVER: wV0IppLqPG8=

@@ -175,9 +175,23 @@ async def heartbeat(username: str = Form(...)):
 @app.get("/users")
 async def users():
     data = load_data()
-    return {
-        "users": [
-            {"username": u, "online": data["users"][u]["online"]}
-            for u in data["users"]
-        ]
-    }
+    now = time.time()
+
+    users = []
+    for u, info in data["users"].items():
+        online = info["online"]
+        last = info["last_heartbeat"]
+
+        if online and now - last > HEARTBEAT_TIMEOUT:
+            online = False
+            info["online"] = False
+
+        users.append({
+            "username": u,
+            "online": online,
+            "last_seen": last
+        })
+
+    save_data(data)
+    return {"users": users}
+
