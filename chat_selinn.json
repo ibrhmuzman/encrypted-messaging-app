@@ -1,0 +1,44 @@
+{
+  "ibo": [
+    {
+      "from": "me",
+      "text": "ibo selam"
+    },
+    {
+      "from": "ibo",
+      "text": "selamm selinn"
+    },
+    {
+      "from": "me",
+      "text": "nasılsınn"
+    },
+    {
+      "from": "ibo",
+      "text": "iyiyimmm sen nasılsın?"
+    },
+    {
+      "from": "me",
+      "text": "ben de iyiyim teşekkrürler sizin orda da kar yağdımı"
+    },
+    {
+      "from": "ibo",
+      "text": "yokkk yağmadıı"
+    },
+    {
+      "from": "me",
+      "text": "hııı"
+    },
+    {
+      "from": "me",
+      "text": "dedim belki yağdı"
+    },
+    {
+      "from": "me",
+      "text": "neyse teşekkür ederim iyi gecelerr"
+    },
+    {
+      "from": "ibo",
+      "text": "rica ederim sanada numunee"
+    }
+  ]
+}

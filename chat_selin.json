@@ -1,0 +1,34 @@
+{
+  "ibrahim": [
+    {
+      "from": "me",
+      "text": "hı"
+    }
+  ],
+  "ali": [
+    {
+      "from": "ali",
+      "text": "merhaba"
+    },
+    {
+      "from": "me",
+      "text": "merhaba"
+    },
+    {
+      "from": "ali",
+      "text": "nasılsın"
+    },
+    {
+      "from": "me",
+      "text": "iyiyim"
+    },
+    {
+      "from": "me",
+      "text": "sen?"
+    },
+    {
+      "from": "ali",
+      "text": "bende iyiyim teşekkürlerr"
+    }
+  ]
+}

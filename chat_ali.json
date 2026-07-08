@@ -1,0 +1,28 @@
+{
+  "selin": [
+    {
+      "from": "me",
+      "text": "merhaba"
+    },
+    {
+      "from": "selin",
+      "text": "merhaba"
+    },
+    {
+      "from": "me",
+      "text": "nasılsın"
+    },
+    {
+      "from": "selin",
+      "text": "iyiyim"
+    },
+    {
+      "from": "selin",
+      "text": "sen?"
+    },
+    {
+      "from": "me",
+      "text": "bende iyiyim teşekkürlerr"
+    }
+  ]
+}
